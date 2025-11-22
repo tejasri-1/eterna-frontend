@@ -1,15 +1,13 @@
-// src/components/Table/TokenTable.tsx
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAppDispatch } from "../../utils/hooks";
+import { useAppDispatch, useAppSelector } from "../../utils/hooks";
 import { setTokens, setLoading, setError } from "../../store/tokensSlice";
-import { useAppSelector } from "../../utils/hooks";
 import TokenRow from "./TokenRow";
 import useWebSocketMock from "../../hooks/useWebSocketMock";
 import clsx from "clsx";
 
-type SortKey = "price" | "change24h" | "marketCap" | "pairs" | "symbol";
+type SortKey = "symbol" | "price" | "change24h" | "marketCap" | "pairs";
 
 function fetchTokens() {
   return fetch("/api/mock/tokens").then((r) => r.json());
@@ -18,15 +16,22 @@ function fetchTokens() {
 export default function TokenTable() {
   const dispatch = useAppDispatch();
   const tokensState = useAppSelector((s) => s.tokens);
+
+  // ------------------------------
+  // State
+  // ------------------------------
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [desc, setDesc] = useState(true);
-  const [filter, setFilter] = useState<"all" | "new" | "migrated">("all");
+  const [filter, setFilter] = useState<"all" | "new" | "final-stretch" | "migrated">("all");
   const [wsEnabled, setWsEnabled] = useState(true);
 
+  // ------------------------------
+  // Data Fetch
+  // ------------------------------
   const { data, isLoading, error } = useQuery({
     queryKey: ["tokens"],
     queryFn: fetchTokens,
-    staleTime: 60_000
+    staleTime: 60_000,
   });
 
   useEffect(() => {
@@ -35,98 +40,163 @@ export default function TokenTable() {
     if (data?.tokens) dispatch(setTokens(data.tokens));
   }, [data, isLoading, error, dispatch]);
 
-  // connect websocket mock to apply live updates (we keep enabled toggle)
   useWebSocketMock(wsEnabled);
 
+  // ------------------------------
+  // Filtering + Sorting
+  // ------------------------------
   const tokenList = useMemo(() => {
     const arr = tokensState.ids.map((id) => tokensState.byId[id]).filter(Boolean);
+
+    // ---- FILTER ----
     let filtered = arr;
-    if (filter === "new") filtered = arr.filter((t) => t.flags?.includes("New pair"));
-    if (filter === "migrated") filtered = arr.filter((t) => t.flags?.includes("Migrated"));
+
+    if (filter !== "all") {
+      filtered = arr.filter((t) => t.flags?.includes(filter));
+    }
+
+    // ---- SORT ----
     filtered.sort((a, b) => {
-      const vA = (a as any)[sortKey];
-      const vB = (b as any)[sortKey];
-      if (typeof vA === "string") return desc ? vB.localeCompare(vA) : vA.localeCompare(vB);
-      return desc ? Number(vB) - Number(vA) : Number(vA) - Number(vB);
+      const A = (a as any)[sortKey];
+      const B = (b as any)[sortKey];
+
+      if (typeof A === "string") {
+        return desc ? B.localeCompare(A) : A.localeCompare(B);
+      }
+
+      return desc ? Number(B) - Number(A) : Number(A) - Number(B);
     });
+
     return filtered;
   }, [tokensState, sortKey, desc, filter]);
 
+  // ------------------------------
+  // UI
+  // ------------------------------
   return (
     <section className="bg-surface/80 rounded-2xl p-4 shadow-lg border border-white/5">
+      {/* FILTER BAR */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex gap-3 items-center">
-          <button
-            onClick={() => { setFilter("all"); }}
-            className={clsx("px-3 py-1 rounded-md text-sm", filter === "all" ? "bg-white/6" : "hover:bg-white/3")}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setFilter("new")}
-            className={clsx("px-3 py-1 rounded-md text-sm", filter === "new" ? "bg-white/6" : "hover:bg-white/3")}
-          >
-            New pairs
-          </button>
-          <button
-            onClick={() => setFilter("migrated")}
-            className={clsx("px-3 py-1 rounded-md text-sm", filter === "migrated" ? "bg-white/6" : "hover:bg-white/3")}
-          >
-            Migrated
-          </button>
+          {[
+            { key: "all", label: "All" },
+            { key: "new", label: "New pairs" },
+            { key: "final-stretch", label: "Final Stretch" },
+            { key: "migrated", label: "Migrated" },
+          ].map((btn) => (
+            <button
+              key={btn.key}
+              onClick={() => setFilter(btn.key as any)}
+              className={clsx(
+                "px-3 py-1 rounded-md text-sm",
+                filter === btn.key ? "bg-white/6" : "hover:bg-white/3"
+              )}
+            >
+              {btn.label}
+            </button>
+          ))}
         </div>
-        <div className="flex items-center gap-3 text-sm">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={wsEnabled} onChange={(e) => setWsEnabled(e.target.checked)} />
-            live updates
-          </label>
-          <div className="text-xs text-slate-400">Rows: {tokenList.length}</div>
-        </div>
-      </div>
 
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={wsEnabled}
+            onChange={(e) => setWsEnabled(e.target.checked)}
+          />
+          live updates
+        </label>
+      </div>
+      
+      {/* Error UI */}
+      {error && (
+        <div className="p-6 text-center text-red-400">
+          Failed to load tokens — retrying...
+        </div>
+      )}
+
+      {/* TABLE */}
       <div className="w-full overflow-auto rounded-md">
         <table className="min-w-[900px] w-full table-auto">
           <thead>
             <tr className="text-left text-sm text-slate-400 border-b border-white/3">
-              <th className="p-3">Token</th>
-              <th className="p-3 cursor-pointer" onClick={() => { setSortKey("price"); setDesc((d) => (sortKey === "price" ? !d : true)); }}>
+              <Th sortable sortKey={sortKey} desc={desc} setSortKey={setSortKey} setDesc={setDesc} column="symbol">
+                Token
+              </Th>
+              <Th sortable sortKey={sortKey} desc={desc} setSortKey={setSortKey} setDesc={setDesc} column="price">
                 Price
-              </th>
-              <th className="p-3 cursor-pointer" onClick={() => { setSortKey("change24h"); setDesc((d) => (sortKey === "change24h" ? !d : true)); }}>
+              </Th>
+              <Th sortable sortKey={sortKey} desc={desc} setSortKey={setSortKey} setDesc={setDesc} column="change24h">
                 24h %
-              </th>
-              <th className="p-3 cursor-pointer" onClick={() => { setSortKey("marketCap"); setDesc((d) => (sortKey === "marketCap" ? !d : true)); }}>
+              </Th>
+              <Th sortable sortKey={sortKey} desc={desc} setSortKey={setSortKey} setDesc={setDesc} column="marketCap">
                 Market Cap
-              </th>
-              <th className="p-3 cursor-pointer" onClick={() => { setSortKey("pairs"); setDesc((d) => (sortKey === "pairs" ? !d : true)); }}>
+              </Th>
+              <Th sortable sortKey={sortKey} desc={desc} setSortKey={setSortKey} setDesc={setDesc} column="pairs">
                 Pairs
-              </th>
+              </Th>
               <th className="p-3">Actions</th>
             </tr>
           </thead>
 
           <tbody>
-            {isLoading && Array.from({ length: 8 }).map((_, i) => (
-              <tr key={i} className="animate-pulse">
-                <td className="p-3">
-                  <div className="h-6 w-36 bg-white/4 rounded-md shimmer" />
-                </td>
-                <td className="p-3"><div className="h-6 w-24 bg-white/4 rounded-md shimmer" /></td>
-                <td className="p-3"><div className="h-6 w-16 bg-white/4 rounded-md shimmer" /></td>
-                <td className="p-3"><div className="h-6 w-28 bg-white/4 rounded-md shimmer" /></td>
-                <td className="p-3"><div className="h-6 w-10 bg-white/4 rounded-md shimmer" /></td>
-                <td className="p-3"><div className="h-6 w-16 bg-white/4 rounded-md shimmer" /></td>
-              </tr>
-            ))}
+            {/* Skeletons */}
+            {isLoading &&
+              Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i} className="animate-pulse">
+                  <td className="p-3"><div className="h-6 w-36 bg-white/4 rounded-md shimmer" /></td>
+                  <td className="p-3"><div className="h-6 w-24 bg-white/4 rounded-md shimmer" /></td>
+                  <td className="p-3"><div className="h-6 w-16 bg-white/4 rounded-md shimmer" /></td>
+                  <td className="p-3"><div className="h-6 w-28 bg-white/4 rounded-md shimmer" /></td>
+                  <td className="p-3"><div className="h-6 w-10 bg-white/4 rounded-md shimmer" /></td>
+                  <td className="p-3"><div className="h-6 w-16 bg-white/4 rounded-md shimmer" /></td>
+                </tr>
+              ))}
 
+            {/* Data Rows */}
             {!isLoading && tokenList.map((t) => <TokenRow key={t.id} token={t} />)}
 
+            {/* Empty State */}
             {!isLoading && tokenList.length === 0 && (
-              <tr><td colSpan={6} className="p-6 text-center text-slate-400">No tokens match the filter.</td></tr>
+              <tr>
+                <td colSpan={6} className="p-6 text-center text-slate-400">
+                  No tokens match the filter.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
       </div>
     </section>
+  );
+}
+
+// ---------------------------------------
+// Reusable Header Component for Sorting
+// ---------------------------------------
+function Th({
+  children,
+  column,
+  sortable,
+  sortKey,
+  desc,
+  setSortKey,
+  setDesc,
+}: any) {
+  return (
+    <th
+      className={clsx("p-3 select-none", sortable && "cursor-pointer")}
+      onClick={() => {
+        if (!sortable) return;
+        setDesc(sortKey === column ? !desc : true);
+        setSortKey(column);
+      }}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        {sortKey === column && (
+          <span className="text-xs">{desc ? "↓" : "↑"}</span>
+        )}
+      </div>
+    </th>
   );
 }

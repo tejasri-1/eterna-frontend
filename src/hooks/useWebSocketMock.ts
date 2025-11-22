@@ -1,31 +1,29 @@
-// src/hooks/useWebSocketMock.ts
+// File: src/hooks/useWebSocketMock.ts
 "use client";
-import { useEffect, useRef } from "react";
-import { useAppDispatch } from "../utils/hooks";
-import { updatePrice } from "../store/tokensSlice";
+import { useEffect } from "react";
+import { useAppDispatch, useAppSelector } from "../utils/hooks";
+import { updateTokenPrice } from "../store/tokensSlice";
 
-export default function useWebSocketMock(enabled: boolean) {
+export default function useWebSocketMock(enabled: boolean = true) {
   const dispatch = useAppDispatch();
-  const ref = useRef<number | null>(null);
+  const tokens = useAppSelector((s) => s.tokens);
 
   useEffect(() => {
     if (!enabled) return;
-    // Diff-based updates: pick random token IDs and adjust price
-    ref.current = window.setInterval(() => {
-      // pick 3-6 updates per tick
-      const updates = Math.floor(Math.random() * 4) + 2;
-      for (let i = 0; i < updates; i++) {
-        const id = `t-${Math.floor(Math.random() * 40) + 1}`;
-        // price cent movement
-        const delta = (Math.random() - 0.5) * 0.02; // small percent
-        // get old price from DOM attribute (we can't access redux state here reliably), so send small random update
-        // dispatch approximate update; UI will animate
-        dispatch(updatePrice({ id, price: Number((1 + delta).toFixed(6)) * 1 } as any));
-      }
-    }, 1500);
 
-    return () => {
-      if (ref.current) window.clearInterval(ref.current);
-    };
-  }, [enabled, dispatch]);
+    const interval = setInterval(() => {
+      for (const id of tokens.ids) {
+        const token = tokens.byId[id];
+        if (!token) continue;
+
+        const lastPrice = token.price;
+        const newPrice =
+          +(lastPrice + (Math.random() - 0.5) * 0.003 * lastPrice).toFixed(6);
+
+        dispatch(updateTokenPrice({ id, price: newPrice }));
+      }
+    }, 1200);
+
+    return () => clearInterval(interval);
+  }, [dispatch, tokens, enabled]);
 }

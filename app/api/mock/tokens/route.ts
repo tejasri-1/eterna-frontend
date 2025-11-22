@@ -1,5 +1,4 @@
-// app/api/mock/tokens/route.ts
-// Next.js route handler to mock tokens; returns JSON; placed in app/api/mock/tokens/route.ts
+// File: app/api/mock/tokens/route.ts
 import { NextResponse } from "next/server";
 
 function randomFloat(min: number, max: number) {
@@ -8,6 +7,14 @@ function randomFloat(min: number, max: number) {
 
 function genToken(i: number) {
   const price = Number((randomFloat(0.1, 1500)).toFixed(6));
+  // Spread flags across tokens: New pair, Migrated, Final Stretch
+  const flagRoll = i % 13;
+  const flags: string[] = [];
+  if (flagRoll === 0) flags.push("new");
+  if (flagRoll === 1) flags.push("migrated");
+  if (flagRoll === 2) flags.push("final-stretch");
+  if (flagRoll === 3) flags.push("new", "final-stretch");
+
   return {
     id: `t-${i}`,
     symbol: ["SOL", "ETH", "BTC", "ABC", "XYZ", "MIG", "NEW"][i % 7] + (i > 6 ? `-${i}` : ""),
@@ -16,7 +23,7 @@ function genToken(i: number) {
     change24h: Number((randomFloat(-15, 15)).toFixed(2)),
     marketCap: Math.floor(randomFloat(1e6, 5e9)),
     pairs: Math.floor(randomFloat(1, 120)),
-    flags: i % 7 === 0 ? ["New pair"] : i % 11 === 0 ? ["Migrated"] : []
+    flags
   };
 }
 
