@@ -32,38 +32,35 @@ export function ModalTrigger({
   );
 }
 
+
 export function ModalContent({
-  title,
   children,
-  className,
+  title,
+  className = "",
+  style = {},
 }: {
+  children: React.ReactNode;
   title?: string;
-  children: ReactNode;
   className?: string;
+  style?: React.CSSProperties;
 }) {
   return (
     <Dialog.Portal>
-      <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm data-[state=open]:animate-fade-in" />
+      <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
 
       <Dialog.Content
-        className={clsx(
-          "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-          "w-[min(95%,520px)] rounded-2xl bg-surface p-6 shadow-2xl",
-          "border border-white/10 data-[state=open]:animate-scale-in",
-          className
-        )}
+        className={`fixed left-1/2 top-1/2 w-[90%] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl shadow-xl ${className}`}
+        style={style}
       >
         {title && (
-          <Dialog.Title className="text-lg font-semibold mb-4">
+          <div className="text-lg font-semibold mb-3" style={{ color: "black" }}>
             {title}
-          </Dialog.Title>
+          </div>
         )}
 
-        {children}
+        <div>{children}</div>
 
-        <Dialog.Close className="mt-6 px-3 py-1 rounded-md bg-white/10 text-sm">
-          Close
-        </Dialog.Close>
+        <Dialog.Close className="absolute right-3 top-3 text-black">✕</Dialog.Close>
       </Dialog.Content>
     </Dialog.Portal>
   );
